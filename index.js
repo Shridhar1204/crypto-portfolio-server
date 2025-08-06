@@ -10,10 +10,11 @@ const HoldingRouter = require("./Routes/HoldingRouter");
 const PORT = process.env.PORT || 8080;
 const app = express();
 
-// ✅ Define allowed origins for CORS
+// ✅ CORS config BEFORE any middleware
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://crypto-portfolio-client.vercel.app"
+  "https://crypto-portfolio-new.vercel.app",
+  "https://crypto-portfolio-client.vercel.app",
 ];
 
 const corsOptions = {
@@ -27,18 +28,18 @@ const corsOptions = {
   credentials: true,
 };
 
+// ✅ Apply CORS before anything else
 app.use(cors(corsOptions));
 
-
-// ✅ Body parsers
+// ✅ Body parsing middleware
 app.use(express.json());
 app.use(bodyParser.json());
 
-// ✅ Routes (no colons or typos!)
+// ✅ Routes
 app.use("/auth", AuthRouter);
 app.use("/holdings", HoldingRouter);
 
-// ✅ Start the server
+// ✅ Start server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
