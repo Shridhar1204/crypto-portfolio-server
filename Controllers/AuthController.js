@@ -47,6 +47,8 @@ const login = async (req, res) => {
       });
     }
 
+    console.log(process.env.JWT_SECRET)
+
     const jwtToken = jwt.sign(
       { email: user.email, _id: user.id },
       process.env.JWT_SECRET,

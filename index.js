@@ -12,7 +12,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(bodyParser.json());
-const allowedOrigins = ['http://localhost:5173', 'https://crypto-portfolio.vercel.app'];
+const allowedOrigins = ['http://localhost:5173','https://crypto-portfolio-new.vercel.app'];
 
 const corsOptions = {
   origin: function (origin, callback) {
