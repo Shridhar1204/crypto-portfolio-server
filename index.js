@@ -10,37 +10,37 @@ const HoldingRouter = require("./Routes/HoldingRouter");
 const PORT = process.env.PORT || 8080;
 const app = express();
 
-// ✅ CORRECT CORS setup
+// ✅ Define allowed origins for CORS
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://crypto-portfolio-client.vercel.app"
+  "https://crypto-portfolio-new.vercel.app",
+  "https://crypto-portfolio-client.vercel.app"  // Add this if you're deploying frontend here
 ];
 
+// ✅ Configure CORS
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, Postman, curl)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
     } else {
-      return callback(new Error("CORS not allowed from this origin"));
+      callback(new Error("Not allowed by CORS"));
     }
   },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
 };
 
-// ✅ Use CORS before anything else
+// ✅ Apply CORS once only
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions)); // <-- preflight requests handler
 
-app.use(bodyParser.json());
+// ✅ Body parsers
 app.use(express.json());
+app.use(bodyParser.json());
 
+// ✅ Routes (no colons or typos!)
 app.use("/auth", AuthRouter);
 app.use("/holdings", HoldingRouter);
 
+// ✅ Start the server
 app.listen(PORT, () => {
-  console.log(`✅ Server is running on ${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });
