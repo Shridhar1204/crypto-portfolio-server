@@ -2,44 +2,24 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 require("./Models/db");
-const bodyParser = require("body-parser");
-
 const AuthRouter = require("./Routes/AuthRouter");
 const HoldingRouter = require("./Routes/HoldingRouter");
 
-const PORT = process.env.PORT || 8080;
 const app = express();
+const PORT = process.env.PORT || 8080;
 
-// ✅ CORS config BEFORE any middleware
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://crypto-portfolio-new.vercel.app",
-  "https://crypto-portfolio-client.vercel.app",
-];
+// ✅ Use basic CORS setup (open it for now to test)
+app.use(cors({
+  origin: '*', // Allow all origins temporarily to check CORS works
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
-const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
-  credentials: true,
-};
-
-// ✅ Apply CORS before anything else
-app.use(cors(corsOptions));
-
-// ✅ Body parsing middleware
 app.use(express.json());
-app.use(bodyParser.json());
 
-// ✅ Routes
 app.use("/auth", AuthRouter);
 app.use("/holdings", HoldingRouter);
 
-// ✅ Start server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
