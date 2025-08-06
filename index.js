@@ -1,33 +1,30 @@
 const express = require("express");
 const cors = require("cors");
-require("dotenv").config();
-require("./Models/db");
+require('dotenv').config();
+require('./Models/db');
 const bodyParser = require("body-parser");
-const AuthRouter = require("./Routes/AuthRouter");
-const HoldingRouter = require("./Routes/HoldingRouter");
+
+const AuthRouter = require('./Routes/AuthRouter');
+const HoldingRouter = require('./Routes/HoldingRouter');
 
 const PORT = process.env.PORT || 8080;
 
 const app = express();
 
+// ✅ Correct CORS setup
 const allowedOrigins = [
-  "http://localhost:5173",                         
-  "https://crypto-portfolio-new.vercel.app", 
-  "https://crypto-portfolio-client.vercel.app"    
+  "http://localhost:5173",
+  "https://crypto-portfolio-client.vercel.app",
 ];
 
 const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
+  origin: allowedOrigins,
   credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
 
-// ✅ Apply CORS once with correct options
+// ✅ Apply it ONCE before any routes
 app.use(cors(corsOptions));
 
 app.use(express.json());
