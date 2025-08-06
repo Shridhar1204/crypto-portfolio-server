@@ -13,11 +13,9 @@ const app = express();
 // ✅ Define allowed origins for CORS
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://crypto-portfolio-new.vercel.app",
-  "https://crypto-portfolio-client.vercel.app"  // Add this if you're deploying frontend here
+  "https://crypto-portfolio-client.vercel.app"
 ];
 
-// ✅ Configure CORS
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {
@@ -29,8 +27,8 @@ const corsOptions = {
   credentials: true,
 };
 
-// ✅ Apply CORS once only
 app.use(cors(corsOptions));
+
 
 // ✅ Body parsers
 app.use(express.json());
