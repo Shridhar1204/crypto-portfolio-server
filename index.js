@@ -10,12 +10,18 @@ const PORT = process.env.PORT || 8080;
 
 const app = express();
 
-app.options('*', cors()); // handle preflight requests globally
+// ✅ Handle preflight requests manually to avoid path-to-regexp crash
+app.options('*', (req, res) => {
+  res.header("Access-Control-Allow-Origin", "https://crypto-portfolio-client.vercel.app");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.sendStatus(200);
+});
 
-
-// ✅ Apply CORS with correct origin (NO trailing slash)
+// ✅ Set up CORS
 app.use(cors({
-  origin: "https://crypto-portfolio-client.vercel.app", // <-- No trailing slash
+  origin: "https://crypto-portfolio-client.vercel.app",
   credentials: true
 }));
 
@@ -26,13 +32,6 @@ app.use(bodyParser.json());
 // routes
 app.use('/auth', AuthRouter);
 app.use('/holdings', HoldingRouter);
-
-app._router.stack.forEach((r) => {
-  if (r.route && r.route.path) {
-    console.log("Route registered:", r.route.path);
-  }
-});
-
 
 app.listen(PORT, () => {
   console.log(`Server is running on ${PORT}`);
