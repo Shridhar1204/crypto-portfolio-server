@@ -12,10 +12,7 @@ const app = express();
 
 
 // ✅ Set up CORS
-app.use(cors({
-  origin: "https://crypto-portfolio-client.vercel.app",
-  credentials: true
-}));
+app.use(cors({origin:'https://crypto-portfolio-client.vercel.app'}))
 
 // other middlewares
 app.use(express.json());
