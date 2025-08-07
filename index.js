@@ -1,23 +1,27 @@
 const express = require("express");
 const cors = require("cors");
-require("dotenv").config();
-require("./Models/db");
+require('dotenv').config();
+require('./Models/db');
+const bodyParser = require("body-parser")
+const AuthRouter = require('./Routes/AuthRouter');
+const HoldingRouter = require('./Routes/HoldingRouter');
 
-const AuthRouter = require("./Routes/AuthRouter");
-const HoldingRouter = require("./Routes/HoldingRouter");
-
-const app = express();
 const PORT = process.env.PORT || 8080;
 
-// ✅ Minimal CORS setup — Open access to all for testing
-app.use(cors());  // ← THIS must come BEFORE your routes
+const app = express();
+app.use(cors());
 app.use(express.json());
+app.use(bodyParser.json());
+app.use(cors({
+  origin: "https://crypto-portfolio-client.vercel.app/",
+  credentials: true
+}));
 
-// ✅ Routes
-app.use("/auth", AuthRouter);
-app.use("/holdings", HoldingRouter);
 
-// ✅ Start server
+app.use('/auth', AuthRouter);
+app.use('/holdings', HoldingRouter);
+
+
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+    console.log(`Server is running on ${PORT}`);
 });
