@@ -27,6 +27,13 @@ app.use(bodyParser.json());
 app.use('/auth', AuthRouter);
 app.use('/holdings', HoldingRouter);
 
+app._router.stack.forEach((r) => {
+  if (r.route && r.route.path) {
+    console.log("Route registered:", r.route.path);
+  }
+});
+
+
 app.listen(PORT, () => {
   console.log(`Server is running on ${PORT}`);
 });
