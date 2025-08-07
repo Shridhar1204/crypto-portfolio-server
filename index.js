@@ -1,33 +1,22 @@
 const express = require("express");
-const bodyParser = require("body-parser");
-require("dotenv").config();
-require("./Models/db");
-
-const AuthRouter = require("./Routes/AuthRouter");
-const HoldingRouter = require("./Routes/HoldingRouter");
+const cors = require("cors");
 
 const app = express();
-const PORT = process.env.PORT || 8080;
 
-// 1⃣ Move CORS headers manually — set them for **every** request.
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "https://crypto-portfolio-client.vercel.app");
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.header("Access-Control-Allow-Credentials", "true");
+// ✅ Use built-in CORS handling — don't manually access req.headers.origin
+app.use(cors({
+  origin: "https://crypto-portfolio-client.vercel.app", // ✅ Your frontend
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  credentials: true,
+}));
 
-  // 2⃣ Provide a clear response to preflight (OPTIONS) requests.  
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(204);
-  }
-
-  next();
-});
-
-app.use(bodyParser.json());
 app.use(express.json());
 
-app.use("/auth", AuthRouter);
-app.use("/holdings", HoldingRouter);
+// Sample route
+app.post("/auth/login", (req, res) => {
+  console.log("Login hit", req.body);
+  res.json({ message: "Login successful" });
+});
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// ✅ Export for Vercel serverless
+module.exports = app;
