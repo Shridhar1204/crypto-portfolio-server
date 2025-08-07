@@ -1,31 +1,36 @@
 const express = require("express");
 const cors = require("cors");
-require('dotenv').config();
-require('./Models/db');
 const bodyParser = require("body-parser");
-const AuthRouter = require('./Routes/AuthRouter');
-const HoldingRouter = require('./Routes/HoldingRouter');
+require("dotenv").config();
+require("./Models/db");
 
-const PORT = process.env.PORT || 8080;
+const AuthRouter = require("./Routes/AuthRouter");
+const HoldingRouter = require("./Routes/HoldingRouter");
 
 const app = express();
+const PORT = process.env.PORT || 8080;
 
+// ✅ Always set CORS *before* any routes or middleware
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "https://crypto-portfolio-client.vercel.app");
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.header("Access-Control-Allow-Credentials", "true");
 
-// ✅ Set up CORS
-app.use(cors({origin:'https://crypto-portfolio-client.vercel.app'}))
+  // ✅ Respond to preflight requests
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204); // No Content
+  }
 
-// other middlewares
-app.use(express.json());
+  next();
+});
+
 app.use(bodyParser.json());
+app.use(express.json());
 
-// routes
-app.use('/auth', AuthRouter);
-app.use('/holdings', HoldingRouter);
-
-const listEndpoints = require('express-list-endpoints');
-console.log(listEndpoints(app));
-
+app.use("/auth", AuthRouter);
+app.use("/holdings", HoldingRouter);
 
 app.listen(PORT, () => {
-  console.log(`Server is running on ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
