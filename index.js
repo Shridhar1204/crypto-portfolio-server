@@ -3,20 +3,18 @@ const cors = require("cors");
 
 const app = express();
 
-// ✅ Use built-in CORS handling — don't manually access req.headers.origin
 app.use(cors({
-  origin: "https://crypto-portfolio-client.vercel.app", // ✅ Your frontend
+  origin: "https://crypto-portfolio-client.vercel.app",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   credentials: true,
 }));
 
 app.use(express.json());
 
-// Sample route
-app.post("/auth/login", (req, res) => {
-  console.log("Login hit", req.body);
-  res.json({ message: "Login successful" });
+app.get("/", (req, res) => {
+  res.send("Server is running!");
 });
 
-// ✅ Export for Vercel serverless
-module.exports = app;
+app.listen(3000, () => {
+  console.log("Server running on port 3000");
+});
