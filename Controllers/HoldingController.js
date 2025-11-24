@@ -5,18 +5,22 @@ const Holding = require("../Models/Holding");
 // 🔹 Cache for prices (5 minutes)
 const priceCache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
 
+// 🔹 After hitting rate limit, wait this long before trying CoinGecko again
+const RATE_LIMIT_COOLDOWN_MS = 60 * 1000; // 1 minute
+let lastRateLimitTime = 0;
+
 // Helper: safely parse numbers
 const toNumber = (value) => {
   const num = Number(value);
   return Number.isNaN(num) ? 0 : num;
 };
 
-// Helper: fetch prices from CoinGecko in ONE request
+// 🔹 Fetch prices for many coins, with cache + rate-limit cool-down
 const fetchPricesForCoins = async (coinIds) => {
   const prices = {};
   const idsToFetch = [];
 
-  // 1️⃣ Try cache first
+  // 1️⃣ Fill from cache first
   for (const coinId of coinIds) {
     const cached = priceCache.get(coinId);
     if (cached != null) {
@@ -26,15 +30,23 @@ const fetchPricesForCoins = async (coinIds) => {
     }
   }
 
-  // Nothing to fetch
+  // If nothing to fetch from API, we’re done
   if (!idsToFetch.length) return prices;
+
+  const now = Date.now();
+
+  // 2️⃣ If we recently hit rate limit, skip API call and just return cached prices
+  if (now - lastRateLimitTime < RATE_LIMIT_COOLDOWN_MS) {
+    console.warn("Skipping CoinGecko fetch due to recent rate limit");
+    return prices; // may be incomplete; caller will fallback to buyPrice
+  }
 
   try {
     const { data } = await axios.get(
       "https://api.coingecko.com/api/v3/simple/price",
       {
         params: {
-          ids: idsToFetch.join(","), // e.g. "bitcoin,ethereum,solana"
+          ids: idsToFetch.join(","), // "bitcoin,ethereum,solana"
           vs_currencies: "usd",
         },
         timeout: 5000,
@@ -51,13 +63,16 @@ const fetchPricesForCoins = async (coinIds) => {
       }
     });
   } catch (err) {
-    // If CoinGecko rate limits or fails, we just log and let caller decide
     if (err.response && err.response.status === 429) {
       console.error("CoinGecko rate limit hit (429 Too Many Requests)");
-      throw new Error("RATE_LIMIT");
+      lastRateLimitTime = Date.now();
+      // We just return whatever cached prices we had
+      return prices;
     }
+
     console.error("Error fetching prices from CoinGecko:", err.message);
-    throw new Error("PRICE_FETCH_FAILED");
+    // On other errors, also just return cached prices
+    return prices;
   }
 
   return prices;
@@ -114,7 +129,7 @@ const getHoldings = async (req, res) => {
   }
 };
 
-// ✅ Optimized portfolio stats with batching + cache + rate limit handling
+// ✅ Portfolio stats with CoinGecko + cache + graceful 429 handling
 const getPortfolioStats = async (req, res) => {
   try {
     const holdings = await Holding.find({ userId: req.user._id });
@@ -134,28 +149,14 @@ const getPortfolioStats = async (req, res) => {
     let totalProfitLoss = 0;
     const portfolioDetails = [];
 
-    // 1️⃣ Collect unique coin IDs (CoinGecko uses lowercase IDs)
+    // 1️⃣ Collect unique coin IDs (must match CoinGecko IDs, e.g. "bitcoin", "ethereum")
     const allCoinIds = holdings.map((h) =>
       (h.coinName || "").toLowerCase().trim()
     );
     const uniqueCoinIds = [...new Set(allCoinIds)].filter(Boolean);
 
-    let prices = {};
-    try {
-      // 2️⃣ Fetch all missing prices in one call (plus cache)
-      prices = await fetchPricesForCoins(uniqueCoinIds);
-    } catch (error) {
-      if (error.message === "RATE_LIMIT") {
-        return res.status(503).json({
-          success: false,
-          message:
-            "Live price API limit reached. Please try again after some time.",
-        });
-      }
-
-      console.error("Price fetch error:", error.message);
-      // We will fall back to using buyPrice only
-    }
+    // 2️⃣ Get prices (cached + maybe API call)
+    const prices = await fetchPricesForCoins(uniqueCoinIds);
 
     // 3️⃣ Calculate stats
     for (const holding of holdings) {
@@ -164,7 +165,7 @@ const getPortfolioStats = async (req, res) => {
       const quantity = toNumber(holding.quantity);
       const buyPrice = toNumber(holding.buyPrice);
 
-      // If price not available, fall back to buyPrice (no live P/L, but app still works)
+      // If live price available, use it; else fallback to buyPrice
       const currentPrice =
         prices[coinId] != null && !Number.isNaN(prices[coinId])
           ? prices[coinId]
