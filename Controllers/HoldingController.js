@@ -2,12 +2,8 @@ const axios = require("axios");
 const NodeCache = require("node-cache");
 const Holding = require("../Models/Holding");
 
-// 🔹 Cache for prices (5 minutes)
+// Cache coin prices for 5 minutes
 const priceCache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
-
-// 🔹 After hitting rate limit, wait this long before trying CoinGecko again
-const RATE_LIMIT_COOLDOWN_MS = 60 * 1000; // 1 minute
-let lastRateLimitTime = 0;
 
 // Helper: safely parse numbers
 const toNumber = (value) => {
@@ -15,12 +11,12 @@ const toNumber = (value) => {
   return Number.isNaN(num) ? 0 : num;
 };
 
-// 🔹 Fetch prices for many coins, with cache + rate-limit cool-down
+// 🔹 Fetch prices for many coins with cache & single CoinGecko call
 const fetchPricesForCoins = async (coinIds) => {
   const prices = {};
   const idsToFetch = [];
 
-  // 1️⃣ Fill from cache first
+  // 1️⃣ Get from cache first
   for (const coinId of coinIds) {
     const cached = priceCache.get(coinId);
     if (cached != null) {
@@ -30,16 +26,8 @@ const fetchPricesForCoins = async (coinIds) => {
     }
   }
 
-  // If nothing to fetch from API, we’re done
+  // Nothing to fetch from API
   if (!idsToFetch.length) return prices;
-
-  const now = Date.now();
-
-  // 2️⃣ If we recently hit rate limit, skip API call and just return cached prices
-  if (now - lastRateLimitTime < RATE_LIMIT_COOLDOWN_MS) {
-    console.warn("Skipping CoinGecko fetch due to recent rate limit");
-    return prices; // may be incomplete; caller will fallback to buyPrice
-  }
 
   try {
     const { data } = await axios.get(
@@ -63,16 +51,9 @@ const fetchPricesForCoins = async (coinIds) => {
       }
     });
   } catch (err) {
-    if (err.response && err.response.status === 429) {
-      console.error("CoinGecko rate limit hit (429 Too Many Requests)");
-      lastRateLimitTime = Date.now();
-      // We just return whatever cached prices we had
-      return prices;
-    }
-
+    // If CoinGecko fails / rate-limits → log and just use whatever we have
     console.error("Error fetching prices from CoinGecko:", err.message);
-    // On other errors, also just return cached prices
-    return prices;
+    return prices; // may be partial; caller will fallback to buyPrice
   }
 
   return prices;
@@ -102,6 +83,7 @@ const addHolding = async (req, res) => {
     return res.status(201).json({
       message: "Holding added!",
       success: true,
+      holding: newHolding,
     });
   } catch (err) {
     console.error("Add Holding Error:", err);
@@ -129,7 +111,7 @@ const getHoldings = async (req, res) => {
   }
 };
 
-// ✅ Portfolio stats with CoinGecko + cache + graceful 429 handling
+// ✅ Portfolio stats: one CoinGecko call + cache + fallback
 const getPortfolioStats = async (req, res) => {
   try {
     const holdings = await Holding.find({ userId: req.user._id });
@@ -149,23 +131,23 @@ const getPortfolioStats = async (req, res) => {
     let totalProfitLoss = 0;
     const portfolioDetails = [];
 
-    // 1️⃣ Collect unique coin IDs (must match CoinGecko IDs, e.g. "bitcoin", "ethereum")
+    // 1️⃣ Coin IDs (CoinGecko-style: "bitcoin", "ethereum", etc.)
     const allCoinIds = holdings.map((h) =>
       (h.coinName || "").toLowerCase().trim()
     );
     const uniqueCoinIds = [...new Set(allCoinIds)].filter(Boolean);
 
-    // 2️⃣ Get prices (cached + maybe API call)
+    // 2️⃣ Fetch (or reuse) prices for these coins
     const prices = await fetchPricesForCoins(uniqueCoinIds);
 
-    // 3️⃣ Calculate stats
+    // 3️⃣ Compute stats
     for (const holding of holdings) {
       const coinId = (holding.coinName || "").toLowerCase().trim();
 
       const quantity = toNumber(holding.quantity);
       const buyPrice = toNumber(holding.buyPrice);
 
-      // If live price available, use it; else fallback to buyPrice
+      // use live price if available, else fallback to buyPrice
       const currentPrice =
         prices[coinId] != null && !Number.isNaN(prices[coinId])
           ? prices[coinId]
