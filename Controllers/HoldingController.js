@@ -2,61 +2,68 @@ const axios = require("axios");
 const NodeCache = require("node-cache");
 const Holding = require("../Models/Holding");
 
-// Cache coin prices for 5 minutes
-const priceCache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
+// 🔹 Cache for CoinLore tickers (all coins list) for 5 minutes
+const cache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
 
-// Helper: safely parse numbers
+// ✅ Safely convert to number
 const toNumber = (value) => {
   const num = Number(value);
   return Number.isNaN(num) ? 0 : num;
 };
 
-// 🔹 Fetch prices for many coins with cache & single CoinGecko call
-const fetchPricesForCoins = async (coinIds) => {
-  const prices = {};
-  const idsToFetch = [];
-
-  // 1️⃣ Get from cache first
-  for (const coinId of coinIds) {
-    const cached = priceCache.get(coinId);
-    if (cached != null) {
-      prices[coinId] = cached;
-    } else {
-      idsToFetch.push(coinId);
-    }
-  }
-
-  // Nothing to fetch from API
-  if (!idsToFetch.length) return prices;
+// ✅ Fetch all tickers from CoinLore (cached)
+// Docs: GET https://api.coinlore.net/api/tickers/?start=0&limit=100
+// You can increase limit if you use many different coins.
+const fetchCoinLoreTickers = async () => {
+  const cached = cache.get("coinlore_tickers");
+  if (cached) return cached;
 
   try {
-    const { data } = await axios.get(
-      "https://api.coingecko.com/api/v3/simple/price",
+    const res = await axios.get(
+      "https://api.coinlore.net/api/tickers/",
       {
         params: {
-          ids: idsToFetch.join(","), // "bitcoin,ethereum,solana"
-          vs_currencies: "usd",
+          start: 0,
+          limit: 200, // top 200 coins should be plenty for your app
         },
         timeout: 5000,
       }
     );
 
-    idsToFetch.forEach((coinId) => {
-      if (data[coinId] && data[coinId].usd != null) {
-        const price = data[coinId].usd;
-        prices[coinId] = price;
-        priceCache.set(coinId, price);
-      } else {
-        console.warn(`Price not found for coin: ${coinId}`);
-      }
-    });
+    const list = res.data.data || res.data || [];
+    cache.set("coinlore_tickers", list);
+    return list;
   } catch (err) {
-    // If CoinGecko fails / rate-limits → log and just use whatever we have
-    console.error("Error fetching prices from CoinGecko:", err.message);
-    return prices; // may be partial; caller will fallback to buyPrice
+    console.error("Error fetching tickers from CoinLore:", err.message);
+    // if API fails, just return empty -> we'll fall back to buyPrice
+    return [];
   }
+};
 
-  return prices;
+// ✅ Find a ticker by user-entered coin name/symbol
+// - supports "BTC", "btc", "Bitcoin", "bitcoin", "eth", "Ethereum", etc.
+const findTickerForHolding = (tickers, coinNameRaw) => {
+  if (!coinNameRaw) return null;
+
+  const nameTrimmed = coinNameRaw.trim();
+  const symbolUpper = nameTrimmed.toUpperCase();
+  const nameLower = nameTrimmed.toLowerCase();
+
+  // 1) try match by symbol (BTC, ETH, SOL, etc.)
+  let ticker =
+    tickers.find(
+      (t) => (t.symbol || "").toUpperCase() === symbolUpper
+    ) || null;
+
+  if (ticker) return ticker;
+
+  // 2) try match by name (Bitcoin, Ethereum, Solana...)
+  ticker =
+    tickers.find(
+      (t) => (t.name || "").toLowerCase() === nameLower
+    ) || null;
+
+  return ticker;
 };
 
 // ✅ Add holding
@@ -73,7 +80,7 @@ const addHolding = async (req, res) => {
 
     const newHolding = new Holding({
       userId: req.user._id,
-      coinName,
+      coinName, // keep whatever user typed: "ETH", "eth", "Ethereum", etc.
       quantity: toNumber(quantity),
       buyPrice: toNumber(buyPrice),
     });
@@ -111,7 +118,7 @@ const getHoldings = async (req, res) => {
   }
 };
 
-// ✅ Portfolio stats: one CoinGecko call + cache + fallback
+// ✅ Portfolio stats using CoinLore + cache + safe fallback
 const getPortfolioStats = async (req, res) => {
   try {
     const holdings = await Holding.find({ userId: req.user._id });
@@ -131,27 +138,27 @@ const getPortfolioStats = async (req, res) => {
     let totalProfitLoss = 0;
     const portfolioDetails = [];
 
-    // 1️⃣ Coin IDs (CoinGecko-style: "bitcoin", "ethereum", etc.)
-    const allCoinIds = holdings.map((h) =>
-      (h.coinName || "").toLowerCase().trim()
-    );
-    const uniqueCoinIds = [...new Set(allCoinIds)].filter(Boolean);
+    // 1️⃣ Get latest tickers from CoinLore (with cache)
+    const tickers = await fetchCoinLoreTickers();
 
-    // 2️⃣ Fetch (or reuse) prices for these coins
-    const prices = await fetchPricesForCoins(uniqueCoinIds);
-
-    // 3️⃣ Compute stats
+    // 2️⃣ Calculate stats per holding
     for (const holding of holdings) {
-      const coinId = (holding.coinName || "").toLowerCase().trim();
-
       const quantity = toNumber(holding.quantity);
       const buyPrice = toNumber(holding.buyPrice);
 
-      // use live price if available, else fallback to buyPrice
-      const currentPrice =
-        prices[coinId] != null && !Number.isNaN(prices[coinId])
-          ? prices[coinId]
-          : buyPrice;
+      // Try to find matching ticker for this holding
+      const ticker = findTickerForHolding(tickers, holding.coinName);
+
+      let currentPrice = buyPrice; // fallback
+      let source = "buyPrice";
+
+      if (ticker && ticker.price_usd != null) {
+        const parsed = parseFloat(ticker.price_usd);
+        if (!Number.isNaN(parsed)) {
+          currentPrice = parsed;
+          source = "coinlore";
+        }
+      }
 
       const investment = quantity * buyPrice;
       const currentValue = quantity * currentPrice;
@@ -162,7 +169,10 @@ const getPortfolioStats = async (req, res) => {
       totalProfitLoss += profitLoss;
 
       portfolioDetails.push({
-        coinName: holding.coinName,
+        coinName: holding.coinName, // what user sees
+        symbol: ticker ? ticker.symbol : null,
+        coinloreId: ticker ? ticker.id : null,
+        priceSource: source, // "coinlore" or "buyPrice"
         currentPrice,
         quantity,
         buyPrice,
